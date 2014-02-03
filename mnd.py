@@ -37,7 +37,8 @@ def produce_feed (feed):
 		s.connect((feed['host'], feed['port']))
 	except socket.error as e:
 		sys.stderr.write("[!] [%s] FATAL %s:%d %s\n" 
-			% (feed['alias]'], feed['host'], feed['port'], e))
+			% (feed['alias'], feed['host'], feed['port'], e))
+		feed['running'] = False
 		return
 
 	sys.stderr.write("[x] [%s] connected to feed %s:%d\n" 
@@ -49,7 +50,7 @@ def produce_feed (feed):
 		try:
 			data = s.recv(1024)
 			if not data:
-				sys.stderr.wiret("[x] [%s] no data. exiting.\n" 
+				sys.stderr.write("[x] [%s] no data. exiting.\n" 
 					% (feed['alias']))
 				break
 		except socket.error as e:
@@ -76,7 +77,9 @@ def produce_feed (feed):
 		# unlock here
 		feed['lock'].release()
 
-	sys.stdout.write("[x] [%s] goodbye\n" 
+	feed['running'] = False
+
+	sys.stderr.write("[x] [%s] goodbye\n" 
 		% (feed['alias']))
 
 
@@ -105,6 +108,7 @@ index = 0
 for feed in feeds:
 
 	feed['data'] = ''
+	feed['running'] = False
 	feed['lock'] = thread.allocate_lock()
 
 	_dataList.append({
@@ -120,9 +124,12 @@ for feed in feeds:
 try:
 
 	for feed in feeds:
+		feed['running'] = True
 		thread.start_new_thread(produce_feed, (feed, ))
 
 except:
+
+	feed['running'] = False
 
 	sys.stderr.write("[!] ERROR unable to start thread for %s\n" % feed)
 	print(sys.exc_info())
@@ -133,8 +140,17 @@ prev_time = 0
 
 while 1:
 
+	threads_running = False
+
+	for feed in feeds:
+		threads_running |= feed['running']
+
+	if (threads_running == False):
+		sys.stderr.write("[*] no threads running. Goodbye\n")
+		break
+
 	if (should_Terminate == True):
-		sys.stdout.write("[*] Termination condition met. Goodbye\n")
+		sys.stderr.write("[*] Termination condition met. Goodbye\n")
 		break
 	
 	# if time now - time of last SQLite insert is < T 
